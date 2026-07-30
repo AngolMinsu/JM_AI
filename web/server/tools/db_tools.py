@@ -1,260 +1,145 @@
+"""AI function tools for the local mobility SQLite database."""
 import os
-import json
 import sqlite3
-from datetime import datetime
-from typing import Dict, Any
+from datetime import date
+from pathlib import Path
+from typing import Any, Dict, Iterable
 
-# RAG 도구 import (파일이 있을 경우 동작)
 try:
     from tools.rag_tool import RAG_TOOL_SPEC, execute_rag_search
-except ImportError:
+except ImportError:  # Allows DB-only startup when optional RAG packages are absent.
     RAG_TOOL_SPEC = None
     execute_rag_search = None
 
+SERVER_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_DB_PATH = SERVER_DIR / "db" / "database.sqlite"
 
-# ==========================================
-# 0. SQLite DB 연결 헬퍼 함수
-# ==========================================
-def get_db_connection():
-    db_path = os.getenv("DB_FILE_PATH", "./db/database.sqlite")
+
+def get_db_connection() -> sqlite3.Connection:
+    """Return a connection independent of the process working directory."""
+    db_path = Path(os.getenv("DB_FILE_PATH", str(DEFAULT_DB_PATH))).expanduser()
     conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row  # Dict 형태로 Row 반환
+    conn.row_factory = sqlite3.Row
     return conn
 
 
-# ==========================================
-# 1. AI에게 제공할 Tools 스펙 (OpenAI Function Schema)
-# ==========================================
-ALL_TOOLS = [
-    # [Read] 사원 목록 조회
-    {
-        "type": "function",
-        "function": {
-            "name": "get_employee_info",
-            "description": "사원 정보(employees 테이블: name, department, join_date, role, certifications) 목록을 조회합니다.",
-            "parameters": {"type": "object", "properties": {}}
-        }
-    },
-    # [Read] ECU 노드 목록 조회
-    {
-        "type": "function",
-        "function": {
-            "name": "get_ecu_info",
-            "description": "ECU 노드 정보(ecu_nodes 테이블: node_name, mcu_model, can_baudrate, fw_version, status) 목록을 조회합니다.",
-            "parameters": {"type": "object", "properties": {}}
-        }
-    },
-    # [Create] 신규 사원 등록
-    {
-        "type": "function",
-        "function": {
-            "name": "add_employee",
-            "description": "신규 사원 정보를 DB(employees 테이블)에 추가합니다.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "사원 이름 (예: '김철수')"
-                    },
-                    "department": {
-                        "type": "string",
-                        "description": "부서명 (예: '전장SW팀', 'BMS개발팀', '차량제어팀', 'AI융합팀')"
-                    },
-                    "role": {
-                        "type": "string",
-                        "description": "담당 업무 및 역할 (예: 'AUTOSAR BSW 개발', 'CAN-FD 드라이버 작성')"
-                    },
-                    "join_date": {
-                        "type": "string",
-                        "description": "입사일 YYYY-MM-DD 형식 (지정하지 않으면 오늘 날짜 자동 입력)"
-                    },
-                    "certifications": {
-                        "type": "string",
-                        "description": "보유 자격증 (예: 'ISTQB', 'ISO 26262', '없음')"
-                    }
-                },
-                "required": ["name", "department", "role"]
-            }
-        }
-    },
-    # [Update] 사원 정보 수정
-    {
-        "type": "function",
-        "function": {
-            "name": "update_employee",
-            "description": "사원의 부서, 담당 업무, 입사일, 자격증 정보를 수정합니다.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "수정할 대상 사원 이름"
-                    },
-                    "department": {
-                        "type": "string",
-                        "description": "변경할 부서명"
-                    },
-                    "role": {
-                        "type": "string",
-                        "description": "변경할 담당 업무"
-                    },
-                    "join_date": {
-                        "type": "string",
-                        "description": "변경할 입사일 (YYYY-MM-DD)"
-                    },
-                    "certifications": {
-                        "type": "string",
-                        "description": "변경할 자격증 정보"
-                    }
-                },
-                "required": ["name"]
-            }
-        }
-    },
-    # [Delete] 사원 정보 삭제
-    {
-        "type": "function",
-        "function": {
-            "name": "delete_employee",
-            "description": "사원 이름을 기반으로 사원 정보를 DB에서 삭제합니다.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "삭제할 사원 이름"
-                    }
-                },
-                "required": ["name"]
-            }
-        }
-    }
-]
+def _schema(properties: Dict[str, Any], required: Iterable[str] = ()) -> Dict[str, Any]:
+    return {"type": "object", "properties": properties, "required": list(required), "additionalProperties": False}
 
-# RAG 스펙이 존재하는 경우 ALL_TOOLS에 추가
+
+EMPLOYEE_FIELDS = {
+    "name": {"type": "string", "description": "사원 이름"},
+    "department": {"type": "string", "description": "부서명"},
+    "role": {"type": "string", "description": "담당 업무"},
+    "join_date": {"type": "string", "description": "입사일(YYYY-MM-DD)"},
+    "certifications": {"type": "string", "description": "보유 자격증"},
+}
+ECU_FIELDS = {
+    "node_name": {"type": "string", "description": "ECU 노드명"},
+    "mcu_model": {"type": "string", "description": "MCU 모델"},
+    "can_baudrate": {"type": "integer", "description": "CAN 통신 속도(bps)"},
+    "fw_version": {"type": "string", "description": "펌웨어 버전"},
+    "status": {"type": "string", "description": "상태(예: ACTIVE, TESTING, INACTIVE)"},
+}
+
+ALL_TOOLS = [
+    {"type": "function", "function": {"name": "get_employee_info", "description": "사원 정보를 조회합니다. emp_id 또는 이름으로 좁힐 수 있습니다.", "parameters": _schema({"emp_id": {"type": "integer"}, "name": {"type": "string"}})}},
+    {"type": "function", "function": {"name": "add_employee", "description": "신규 사원을 등록합니다.", "parameters": _schema(EMPLOYEE_FIELDS, ("name", "department", "role"))}},
+    {"type": "function", "function": {"name": "update_employee", "description": "emp_id로 사원 정보를 수정합니다. 변경할 필드만 보냅니다.", "parameters": _schema({"emp_id": {"type": "integer"}, **EMPLOYEE_FIELDS}, ("emp_id",))}},
+    {"type": "function", "function": {"name": "delete_employee", "description": "emp_id로 사원을 삭제합니다.", "parameters": _schema({"emp_id": {"type": "integer"}}, ("emp_id",))}},
+    {"type": "function", "function": {"name": "get_ecu_info", "description": "ECU 노드 정보를 조회합니다. node_id 또는 node_name으로 좁힐 수 있습니다.", "parameters": _schema({"node_id": {"type": "integer"}, "node_name": {"type": "string"}})}},
+    {"type": "function", "function": {"name": "add_ecu", "description": "신규 ECU 노드를 등록합니다.", "parameters": _schema(ECU_FIELDS, ("node_name", "mcu_model"))}},
+    {"type": "function", "function": {"name": "update_ecu", "description": "node_id로 ECU 정보를 수정합니다. 변경할 필드만 보냅니다.", "parameters": _schema({"node_id": {"type": "integer"}, **ECU_FIELDS}, ("node_id",))}},
+    {"type": "function", "function": {"name": "delete_ecu", "description": "node_id로 ECU 노드를 삭제합니다.", "parameters": _schema({"node_id": {"type": "integer"}}, ("node_id",))}},
+]
 if RAG_TOOL_SPEC:
     ALL_TOOLS.append(RAG_TOOL_SPEC)
 
 
-# ==========================================
-# 2. Tool 실행 핸들러 (실제 SQL 실행)
-# ==========================================
-def execute_tool(function_name: str, arguments: Dict[str, Any] = None) -> Any:
-    arguments = arguments or {}
+def _select_one(cursor: sqlite3.Cursor, table: str, id_column: str, args: Dict[str, Any], name_column: str):
+    item_id = args.get(id_column)
+    if item_id is not None:
+        cursor.execute(f"SELECT * FROM {table} WHERE {id_column} = ?", (item_id,))
+    elif args.get(name_column):
+        cursor.execute(f"SELECT * FROM {table} WHERE {name_column} = ?", (str(args[name_column]).strip(),))
+    else:
+        return None
+    return cursor.fetchone()
 
-    # RAG 검색 도구 호출 처리
-    if function_name == "search_company_documents" and execute_rag_search:
-        query = arguments.get("query", "")
-        return execute_rag_search(query)
+
+def _changed_fields(arguments: Dict[str, Any], allowed: Dict[str, Any]) -> tuple[list[str], list[Any]]:
+    fields, values = [], []
+    for field in allowed:
+        if field in arguments and arguments[field] is not None:
+            value = str(arguments[field]).strip() if isinstance(arguments[field], str) else arguments[field]
+            if value != "":
+                fields.append(f"{field} = ?")
+                values.append(value)
+    return fields, values
+
+
+def execute_tool(function_name: str, arguments: Dict[str, Any] | None = None) -> Any:
+    arguments = arguments or {}
+    if function_name == "search_company_documents":
+        return execute_rag_search(str(arguments.get("query", ""))) if execute_rag_search else {"status": "error", "message": "RAG 모듈을 불러올 수 없습니다."}
 
     conn = get_db_connection()
     cursor = conn.cursor()
-
     try:
-        # ----------------------------------
-        # 1. READ: 사원 정보 조회
-        # ----------------------------------
         if function_name == "get_employee_info":
-            # 특정 컬럼 정렬 없이 rowid 기준 최신순 정렬
-            cursor.execute("SELECT name, department, join_date, role, certifications FROM employees ORDER BY rowid DESC LIMIT 20")
-            rows = [dict(row) for row in cursor.fetchall()]
-            return rows
-
-        # ----------------------------------
-        # 2. READ: ECU 노드 정보 조회
-        # ----------------------------------
-        elif function_name == "get_ecu_info":
-            cursor.execute("SELECT node_name, mcu_model, can_baudrate, fw_version, status FROM ecu_nodes ORDER BY rowid ASC LIMIT 20")
-            rows = [dict(row) for row in cursor.fetchall()]
-            return rows
-
-        # ----------------------------------
-        # 3. CREATE: 사원 추가 (INSERT)
-        # ----------------------------------
-        elif function_name == "add_employee":
-            name = arguments.get("name")
-            department = arguments.get("department")
-            role = arguments.get("role", "전장 시스템 개발")
-            join_date = arguments.get("join_date", datetime.now().strftime("%Y-%m-%d"))
-            certifications = arguments.get("certifications", "없음")
-
-            # 필수값 방어 로직
-            if not name or not str(name).strip():
-                return {"status": "error", "message": "사원 이름(name)은 필수 항목입니다."}
-            if not department or not str(department).strip():
-                return {"status": "error", "message": "부서명(department)은 필수 항목입니다."}
-
-            cursor.execute("""
-                INSERT INTO employees (name, department, join_date, role, certifications)
-                VALUES (?, ?, ?, ?, ?)
-            """, (name, department, join_date, role, certifications))
-
+            row = _select_one(cursor, "employees", "emp_id", arguments, "name")
+            if arguments.get("emp_id") is not None or arguments.get("name"):
+                return dict(row) if row else {"status": "not_found", "message": "사원을 찾을 수 없습니다."}
+            cursor.execute("SELECT * FROM employees ORDER BY emp_id DESC LIMIT 100")
+            return [dict(r) for r in cursor.fetchall()]
+        if function_name == "get_ecu_info":
+            row = _select_one(cursor, "ecu_nodes", "node_id", arguments, "node_name")
+            if arguments.get("node_id") is not None or arguments.get("node_name"):
+                return dict(row) if row else {"status": "not_found", "message": "ECU 노드를 찾을 수 없습니다."}
+            cursor.execute("SELECT * FROM ecu_nodes ORDER BY node_id ASC LIMIT 100")
+            return [dict(r) for r in cursor.fetchall()]
+        if function_name == "add_employee":
+            fields = {key: arguments.get(key) for key in EMPLOYEE_FIELDS}
+            fields["join_date"] = fields["join_date"] or date.today().isoformat()
+            fields["certifications"] = fields["certifications"] or "없음"
+            if not all(str(fields[key] or "").strip() for key in ("name", "department", "role")):
+                return {"status": "error", "message": "name, department, role은 필수입니다."}
+            cursor.execute("INSERT INTO employees (name, department, role, join_date, certifications) VALUES (?, ?, ?, ?, ?)", (fields["name"].strip(), fields["department"].strip(), fields["role"].strip(), fields["join_date"], fields["certifications"]))
             conn.commit()
-            return {
-                "status": "success",
-                "message": f"사원 '{name}' 님({department} / {role})이 성공적으로 등록되었습니다."
-            }
-
-        # ----------------------------------
-        # 4. UPDATE: 사원 정보 수정
-        # ----------------------------------
-        elif function_name == "update_employee":
-            name = arguments.get("name")
-            if not name:
-                return {"status": "error", "message": "수정할 사원의 이름을 입력해주세요."}
-
-            cursor.execute("SELECT * FROM employees WHERE name = ?", (name,))
-            if not cursor.fetchone():
-                return {"status": "error", "message": f"'{name}' 사원을 찾을 수 없습니다."}
-
-            update_fields = []
-            params = []
-
-            for field in ["department", "role", "join_date", "certifications"]:
-                if field in arguments and arguments[field]:
-                    update_fields.append(f"{field} = ?")
-                    params.append(arguments[field])
-
-            if not update_fields:
-                return {"status": "error", "message": "수정할 정보(부서, 역할, 입사일, 자격증 등)를 전달해주세요."}
-
-            params.append(name)
-            query = f"UPDATE employees SET {', '.join(update_fields)} WHERE name = ?"
-            cursor.execute(query, params)
+            return {"status": "success", "emp_id": cursor.lastrowid, "message": "사원을 등록했습니다."}
+        if function_name == "add_ecu":
+            fields = {key: arguments.get(key) for key in ECU_FIELDS}
+            fields["status"] = fields["status"] or "ACTIVE"
+            if not all(str(fields[key] or "").strip() for key in ("node_name", "mcu_model")):
+                return {"status": "error", "message": "node_name, mcu_model은 필수입니다."}
+            cursor.execute("INSERT INTO ecu_nodes (node_name, mcu_model, can_baudrate, fw_version, status) VALUES (?, ?, ?, ?, ?)", (fields["node_name"].strip(), fields["mcu_model"].strip(), fields["can_baudrate"], fields["fw_version"], fields["status"].strip()))
             conn.commit()
-
-            return {
-                "status": "success",
-                "message": f"사원 '{name}' 님의 정보가 성공적으로 수정되었습니다."
-            }
-
-        # ----------------------------------
-        # 5. DELETE: 사원 삭제
-        # ----------------------------------
-        elif function_name == "delete_employee":
-            name = arguments.get("name")
-            if not name:
-                return {"status": "error", "message": "삭제할 사원의 이름을 입력해주세요."}
-
-            cursor.execute("DELETE FROM employees WHERE name = ?", (name,))
+            return {"status": "success", "node_id": cursor.lastrowid, "message": "ECU 노드를 등록했습니다."}
+        if function_name in ("update_employee", "update_ecu"):
+            table, id_col, name_col, allowed = ("employees", "emp_id", "name", EMPLOYEE_FIELDS) if function_name == "update_employee" else ("ecu_nodes", "node_id", "node_name", ECU_FIELDS)
+            target = _select_one(cursor, table, id_col, arguments, name_col)
+            if not target:
+                return {"status": "not_found", "message": f"수정할 {('사원' if table == 'employees' else 'ECU 노드')}을 찾을 수 없습니다. ID를 확인하세요."}
+            fields, values = _changed_fields(arguments, allowed)
+            if not fields:
+                return {"status": "error", "message": "변경할 필드를 하나 이상 지정하세요."}
+            values.append(target[id_col])
+            cursor.execute(f"UPDATE {table} SET {', '.join(fields)} WHERE {id_col} = ?", values)
             conn.commit()
-
+            return {"status": "success", id_col: target[id_col], "message": "정보를 수정했습니다."}
+        if function_name in ("delete_employee", "delete_ecu"):
+            table, id_col = ("employees", "emp_id") if function_name == "delete_employee" else ("ecu_nodes", "node_id")
+            item_id = arguments.get(id_col)
+            if item_id is None:
+                return {"status": "error", "message": f"{id_col}는 필수입니다."}
+            cursor.execute(f"DELETE FROM {table} WHERE {id_col} = ?", (item_id,))
             if cursor.rowcount == 0:
-                return {"status": "error", "message": f"'{name}' 사원을 찾을 수 없어 삭제하지 못했습니다."}
-
-            return {
-                "status": "success",
-                "message": f"사원 '{name}' 님의 정보가 DB에서 삭제되었습니다."
-            }
-
-        else:
-            return {"status": "error", "message": f"알 수 없는 툴 함수입니다: {function_name}"}
-
-    except Exception as e:
+                return {"status": "not_found", "message": "삭제할 항목을 찾을 수 없습니다."}
+            conn.commit()
+            return {"status": "success", id_col: item_id, "message": "정보를 삭제했습니다."}
+        return {"status": "error", "message": f"알 수 없는 도구: {function_name}"}
+    except sqlite3.Error as exc:
         conn.rollback()
-        print(f"DB Error [{function_name}]: {e}")
-        return {"status": "error", "message": f"DB 작업 중 오류가 발생했습니다: {str(e)}"}
-
+        return {"status": "error", "message": f"DB 작업 오류: {exc}"}
     finally:
         conn.close()

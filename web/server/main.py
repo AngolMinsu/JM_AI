@@ -35,6 +35,12 @@ class ChatRequest(BaseModel):
     message: str
 
 
+SYSTEM_PROMPT = """너는 자룡모빌리티의 차량 전장 및 AI 비서다.
+사원/ECU DB 질의와 변경은 반드시 제공된 도구를 사용하고, 조회 결과의 ID를 함께 안내한다.
+문서 근거가 필요한 채용공고·사내 규정·BMS 로그 질문은 search_company_documents를 사용한다.
+등록·수정·삭제는 사용자의 요청이 명확할 때만 수행한다. 도구 결과에 없는 사실을 만들지 말고 한국어로 간결하게 답한다."""
+
+
 # ==========================================
 # 1. AI 챗봇 대화 API (/api/chat)
 # ==========================================
@@ -44,51 +50,36 @@ async def chat_endpoint(request: ChatRequest):
         raise HTTPException(status_code=400, detail="메시지를 입력해주세요.")
 
     try:
-        # 1차 AI 호출 (Message + Tools 전달)
-        response = openai_client.chat.completions.create(
-            model="qwen3.5",
-            messages=[
-                {"role": "system", "content": "너는 유능한 차량 전장 및 AI 비서다. 필요한 툴을 적절히 사용해서 답변해라."},
-                {"role": "user", "content": request.message}
-            ],
-            tools=ALL_TOOLS
-        )
-
-        ai_message = response.choices[0].message
-
-        # AI가 Tool Call을 요청한 경우
-        if ai_message.tool_calls:
-            tool_call = ai_message.tool_calls[0]
-            function_name = tool_call.function.name
-
-            # 1. AI가 넘겨준 arguments(JSON string) 파싱
-            raw_args = tool_call.function.arguments
-            arguments = json.loads(raw_args) if raw_args else {}
-
-            # 2. Tools 모듈에서 SQL/RAG 실행
-            db_result = execute_tool(function_name, arguments)
-
-            # 3. 2차 AI 호출 (DB/RAG 결과를 전달하여 최종 답변 생성)
-            second_response = openai_client.chat.completions.create(
-                model="qwen3.5",
-                messages=[
-                    {"role": "system", "content": "너는 유능한 차량 전장 및 AI 비서다."},
-                    {"role": "user", "content": request.message},
-                    ai_message,  # model_dump() 대신 raw ai_message 객체 사용
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": function_name,
-                        "content": json.dumps(db_result, ensure_ascii=False) if isinstance(db_result, (dict, list)) else str(db_result)
-                    }
-                ]
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": request.message},
+        ]
+        # A model can ask for several tools at once, or use a second tool after
+        # seeing the first result.  Keep the complete tool-call conversation.
+        for _ in range(6):
+            response = openai_client.chat.completions.create(
+                model=os.getenv("AI_MODEL", "qwen3.5"), messages=messages, tools=ALL_TOOLS
             )
+            ai_message = response.choices[0].message
+            if not ai_message.tool_calls:
+                return {"reply": ai_message.content or "응답을 생성하지 못했습니다."}
 
-            reply_content = second_response.choices[0].message.content or "요청하신 처리를 완료했습니다."
-            return {"reply": reply_content}
-
-        # 일반 대화 응답
-        return {"reply": ai_message.content or "응답을 생성하지 못했습니다."}
+            messages.append(ai_message)
+            for tool_call in ai_message.tool_calls:
+                function_name = tool_call.function.name
+                try:
+                    arguments = json.loads(tool_call.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    result = {"status": "error", "message": "도구 인자 형식이 올바른 JSON이 아닙니다."}
+                else:
+                    result = execute_tool(function_name, arguments)
+                print(f"[Tool] {function_name}: {result}")
+                messages.append({
+                    "role": "tool", "tool_call_id": tool_call.id,
+                    "name": function_name,
+                    "content": json.dumps(result, ensure_ascii=False),
+                })
+        return {"reply": "도구 호출 횟수가 제한을 초과했습니다. 요청을 나누어 다시 시도해주세요."}
 
     except Exception as e:
         print(f"Chat API Error: {e}")
@@ -103,7 +94,7 @@ async def get_ecu_nodes():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM ecu_nodes ORDER BY node_id ASC")
+        cursor.execute("SELECT * FROM ecu_nodes ORDER BY rowid ASC")
         rows = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return rows
@@ -131,5 +122,4 @@ async def get_bms_logs():
 
 if __name__ == "__main__":
     import uvicorn
-    # 8000번 포트로 실행
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

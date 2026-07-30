@@ -1,93 +1,44 @@
+"""Chroma-based RAG search over documents ingested by ingest_documents.py."""
 import os
+from pathlib import Path
+from typing import Any, Dict, List
 import requests
-from typing import List, Dict, Any
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_core.embeddings import Embeddings
 
+VECTOR_DB_PATH = Path(os.getenv("VECTOR_DB_PATH", str(Path(__file__).resolve().parents[1] / "db" / "vector_db")))
+COLLECTION_NAME = "jaryong_documents"
 
-# ==========================================
-# 1. 8081번 Qwen Embedding 서버 연동 클래스
-# ==========================================
 class QwenLocalEmbeddings(Embeddings):
-    """8081번 포트의 local Qwen Embedding 서버를 사용하는 LangChain 용 클래스"""
-    def __init__(self, base_url: str = "http://localhost:8081/v1"):
-        self.base_url = base_url
+    def __init__(self, base_url: str | None = None):
+        self.base_url = (base_url or os.getenv("EMBEDDING_SERVER_URL", "http://localhost:8081/v1")).rstrip("/")
+        self.model = os.getenv("EMBEDDING_MODEL", "qwen3-embedding")
+
+    def _embed(self, inputs: List[str]) -> List[List[float]]:
+        response = requests.post(f"{self.base_url}/embeddings", json={"input": inputs, "model": self.model}, timeout=30)
+        response.raise_for_status()
+        data = response.json().get("data", [])
+        if len(data) != len(inputs):
+            raise RuntimeError("임베딩 서버가 예상한 개수의 벡터를 반환하지 않았습니다.")
+        return [item["embedding"] for item in sorted(data, key=lambda item: item.get("index", 0))]
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        embeddings = []
-        for text in texts:
-            response = requests.post(
-                f"{self.base_url}/embeddings",
-                json={"input": text, "model": "qwen3-embedding"}
-            )
-            if response.status_code == 200:
-                embeddings.append(response.json()["data"][0]["embedding"])
-            else:
-                raise Exception(f"Embedding API Error: {response.text}")
-        return embeddings
+        return self._embed(texts)
 
     def embed_query(self, text: str) -> List[float]:
-        return self.embed_documents([text])[0]
+        return self._embed([text])[0]
 
+RAG_TOOL_SPEC: Dict[str, Any] = {"type": "function", "function": {"name": "search_company_documents", "description": "사내 채용공고와 BMS 셀 로그 문서를 검색합니다. 문서에 근거해야 하는 질문에 사용합니다.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "사용자 질문을 그대로 담은 검색어"}}, "required": ["query"], "additionalProperties": False}}}
 
-# ==========================================
-# 2. AI에 전달할 RAG Tool 스펙 (OpenAI Schema)
-# ==========================================
-RAG_TOOL_SPEC: Dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "search_company_documents",
-        "description": "자룡모빌리티솔루션의 채용공고, 연봉, 복리후생, 직무 자격요건, 사내 규정 등 PDF 문서 정보를 검색합니다.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "검색할 질문이나 주요 키워드 (예: 'BMS 자격요건', '신입 연봉', '복리후생')"
-                }
-            },
-            "required": ["query"]
-        }
-    }
-}
-
-
-# ==========================================
-# 3. 실제 ChromaDB 벡터 검색 실행 함수
-# ==========================================
-def execute_rag_search(query: str) -> str:
-    """
-    ai/data/vectorized_db 경로에 생성된 ChromaDB 인덱스에서 
-    질문(query)과 가장 유사한 문서 조각 top-3를 찾아 텍스트로 반환합니다.
-    """
-    # web/server/tools 위치 기준으로 ai/data/vectorized_db 절대 경로 계산
-    vector_db_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../../ai/data/vectorized_db")
-    )
-
-    if not os.path.exists(vector_db_path):
-        return "시스템 안내: 아직 ai/data/vectorized_db 에 벡터 DB가 생성되지 않았습니다."
-
+def execute_rag_search(query: str, k: int = 4) -> Dict[str, Any]:
+    if not query.strip():
+        return {"status": "error", "message": "검색어가 비어 있습니다."}
+    if not VECTOR_DB_PATH.exists():
+        return {"status": "not_ready", "message": f"RAG 인덱스가 없습니다. web/server에서 'python -m tools.ingest_documents'를 실행하세요."}
     try:
-        embeddings = QwenLocalEmbeddings()
-        vectorstore = Chroma(
-            persist_directory=vector_db_path,
-            embedding_function=embeddings
-        )
-
-        # 유사도가 높은 문서 조각 top 3개 추출
-        docs = vectorstore.similarity_search(query, k=3)
-
-        if not docs:
-            return "문서 검색 결과: 관련된 사내 문서 내용을 찾을 수 없습니다."
-
-        # 검색된 문서 조각들을 보기 좋게 묶기
-        retrieved_texts = [
-            f"[검색 문서 조각 {i+1}]\n{doc.page_content}" 
-            for i, doc in enumerate(docs)
-        ]
-        return "\n\n".join(retrieved_texts)
-
-    except Exception as e:
-        print(f"RAG Search Error: {e}")
-        return f"문서 검색 수행 중 오류 발생: {str(e)}"
+        store = Chroma(collection_name=COLLECTION_NAME, persist_directory=str(VECTOR_DB_PATH), embedding_function=QwenLocalEmbeddings())
+        docs_and_scores = store.similarity_search_with_relevance_scores(query, k=k)
+        results = [{"content": doc.page_content, "source": doc.metadata.get("source", "unknown"), "chunk": doc.metadata.get("chunk", 0), "score": round(float(score), 4)} for doc, score in docs_and_scores]
+        return {"status": "success", "query": query, "results": results} if results else {"status": "not_found", "message": "관련 문서를 찾지 못했습니다."}
+    except Exception as exc:
+        return {"status": "error", "message": f"RAG 검색 오류: {exc}"}
