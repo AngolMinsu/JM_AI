@@ -1,14 +1,65 @@
 [project]
-name = "jaryong-server"
+name = "ssafy-ai-class"
 version = "0.1.0"
-description = "Jaryong Mobility Solutions FastAPI Backend"
+description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.110.0",
-    "uvicorn>=0.28.0",
-    "openai>=1.14.0",
-    "python-dotenv>=1.0.1",
-    "pydantic>=2.6.0",
-    "sqlite-utils>=3.36",
+    "accelerate>=1.14.0",
+    "beautifulsoup4>=4.15.0",
+    "bitsandbytes>=0.49.2",
+    "fastapi>=0.137.1",
+    "gradio>=6.18.0",
+    "huggingface-hub>=1.19.0",
+    "ipykernel>=7.3.0",
+    "ipywidgets>=8.1.8",
+    "jq>=1.11.0",
+    "kaggle>=2.2.2",
+    "koreanize-matplotlib>=0.1.1",
+    "langchain>=1.3.9",
+    "langchain-chroma>=1.1.0",
+    "langchain-docling>=2.0.0",
+    "langchain-openai>=1.3.2",
+    "langchain-text-splitters>=1.1.2",
+    "langgraph-cli[inmem]>=0.4.30",
+    "llama-cpp-python>=0.3.30",
+    "mediapipe>=0.10.35",
+    "nbformat==5.10.4",
+    "nvitop>=1.7.0",
+    "onnx>=1.22.0",
+    "opencv-python>=4.13.0.92",
+    "peft>=0.19.1",
+    "plotly>=6.8.0",
+    "scikit-learn>=1.9.0",
+    "seaborn>=0.13.2",
+    "sentence-transformers>=5.6.0",
+    "torch==2.9.1",
+    "torchaudio==2.9.1",
+    "torchvision==0.24.1",
+    "ultralytics>=8.4.69",
+    "unsloth-zoo>=2026.6.5",
+    "unsloth[cu130-torch291]>=2026.6.7",
+    "uvicorn>=0.49.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "llama-cpp-cu130"
+url = "https://abetlen.github.io/llama-cpp-python/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130" }
+torchaudio = { index = "pytorch-cu130" }
+llama-cpp-python = { index = "llama-cpp-cu130" }
+
+unsloth-zoo = { git = "https://github.com/unslothai/unsloth-zoo.git" }
+unsloth = { git = "https://github.com/unslothai/unsloth.git" }
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]
