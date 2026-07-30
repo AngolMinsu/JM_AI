@@ -61,32 +61,38 @@ async def chat_endpoint(request: ChatRequest):
             tool_call = ai_message.tool_calls[0]
             function_name = tool_call.function.name
 
-            # Tools 모듈에서 SQL 실행
-            db_result = execute_tool(function_name)
+            # 1. AI가 넘겨준 arguments(JSON string) 파싱
+            raw_args = tool_call.function.arguments
+            arguments = json.loads(raw_args) if raw_args else {}
 
-            # 2차 AI 호출 (DB 결과를 돌려주어 최종 답변 작성)
+            # 2. Tools 모듈에서 SQL/RAG 실행
+            db_result = execute_tool(function_name, arguments)
+
+            # 3. 2차 AI 호출 (DB/RAG 결과를 전달하여 최종 답변 생성)
             second_response = openai_client.chat.completions.create(
                 model="qwen3.5",
                 messages=[
                     {"role": "system", "content": "너는 유능한 차량 전장 및 AI 비서다."},
                     {"role": "user", "content": request.message},
-                    ai_message.model_dump(),  # OpenAI Pydantic 객체를 dict로 변환
+                    ai_message,  # model_dump() 대신 raw ai_message 객체 사용
                     {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
-                        "content": json.dumps(db_result, ensure_ascii=False)
+                        "name": function_name,
+                        "content": json.dumps(db_result, ensure_ascii=False) if isinstance(db_result, (dict, list)) else str(db_result)
                     }
                 ]
             )
 
-            return {"reply": second_response.choices[0].message.content}
+            reply_content = second_response.choices[0].message.content or "요청하신 처리를 완료했습니다."
+            return {"reply": reply_content}
 
         # 일반 대화 응답
-        return {"reply": ai_message.content}
+        return {"reply": ai_message.content or "응답을 생성하지 못했습니다."}
 
     except Exception as e:
         print(f"Chat API Error: {e}")
-        raise HTTPException(status_code=500, detail="AI 처리 중 오류가 발생했습니다.")
+        raise HTTPException(status_code=500, detail=f"AI 처리 중 오류가 발생했습니다: {str(e)}")
 
 
 # ==========================================
