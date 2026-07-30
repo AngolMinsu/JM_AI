@@ -28,3 +28,19 @@ nohup: ignoring input
 72.01.400.771 I slot print_timing: id  3 | task 160 |       total time =    3283.29 ms /   192 tokens
 72.01.400.771 I slot print_timing: id  3 | task 160 |    graphs reused =        341
 72.01.400.849 I slot      release: id  3 | task 160 | stop processing: n_tokens = 527, truncated = 0
+76.17.636.610 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 0.976 (> 0.100 thold), f_keep = 0.628
+76.17.636.750 I slot launch_slot_: id  3 | task 349 | processing task, is_child = 0
+76.20.933.345 I slot print_timing: id  3 | task 349 | n_decoded =    190, tg =  63.26 t/s, tg_3s =  63.26 t/s
+76.21.406.594 I slot print_timing: id  3 | task 349 | prompt eval time =     293.11 ms /    11 tokens (   26.65 ms per token,    37.53 tokens per second)
+76.21.406.605 I slot print_timing: id  3 | task 349 |        eval time =    3476.70 ms /   219 tokens (   15.88 ms per token,    62.99 tokens per second)
+76.21.406.605 I slot print_timing: id  3 | task 349 |       total time =    3769.81 ms /   230 tokens
+76.21.406.606 I slot print_timing: id  3 | task 349 |    graphs reused =        557
+76.21.406.673 I slot      release: id  3 | task 349 | stop processing: n_tokens = 557, truncated = 0
+76.46.128.241 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 0.885 (> 0.100 thold), f_keep = 0.594
+76.46.128.362 I slot launch_slot_: id  3 | task 570 | processing task, is_child = 0
+76.49.450.636 I slot print_timing: id  3 | task 570 | n_decoded =    194, tg =  64.39 t/s, tg_3s =  64.39 t/s
+76.49.950.362 I slot print_timing: id  3 | task 570 | prompt eval time =     309.48 ms /    46 tokens (    6.73 ms per token,   148.64 tokens per second)
+76.49.950.377 I slot print_timing: id  3 | task 570 |        eval time =    3512.49 ms /   225 tokens (   15.61 ms per token,    64.06 tokens per second)
+76.49.950.378 I slot print_timing: id  3 | task 570 |       total time =    3821.97 ms /   271 tokens
+76.49.950.378 I slot print_timing: id  3 | task 570 |    graphs reused =        779
+76.49.950.437 I slot      release: id  3 | task 570 | stop processing: n_tokens = 598, truncated = 0
