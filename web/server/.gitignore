@@ -1,3 +1,4 @@
 node_modules
 .env
 insert_dummy.sql
+.venv

@@ -21,3 +21,10 @@ nohup: ignoring input
 42.59.982.267 I slot print_timing: id  3 | task 0 |       total time =    2720.45 ms /   497 tokens
 42.59.982.274 I slot print_timing: id  3 | task 0 |    graphs reused =        156
 42.59.982.372 I slot      release: id  3 | task 0 | stop processing: n_tokens = 496, truncated = 0
+71.58.117.292 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.685
+71.58.117.419 I slot launch_slot_: id  3 | task 160 | processing task, is_child = 0
+72.01.400.757 I slot print_timing: id  3 | task 160 | prompt eval time =     303.60 ms /     4 tokens (   75.90 ms per token,    13.18 tokens per second)
+72.01.400.770 I slot print_timing: id  3 | task 160 |        eval time =    2979.70 ms /   188 tokens (   15.85 ms per token,    63.09 tokens per second)
+72.01.400.771 I slot print_timing: id  3 | task 160 |       total time =    3283.29 ms /   192 tokens
+72.01.400.771 I slot print_timing: id  3 | task 160 |    graphs reused =        341
+72.01.400.849 I slot      release: id  3 | task 160 | stop processing: n_tokens = 527, truncated = 0
