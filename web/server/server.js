@@ -20,7 +20,7 @@ const PORT = 8000;
 
 // 8080번 Qwen AI 서버를 바라보는 OpenAI 클라이언트 생성
 const openai = new OpenAI({
-  baseURL: process.env.AI_SERVER_URL || "http://localhost:8080/v1",
+  baseURL: process.env.AI_SERVER_URL",
   apiKey: "no-need" // 로컬 AI 서버는 API Key가 필요 없음
 });
 
@@ -112,6 +112,32 @@ app.post("/api/chat", async (req, res) => {
   } catch (error) {
     console.error("Chat API Error:", error?.message || error);
     res.status(500).json({ error: "AI 처리 중 오류가 발생했습니다." });
+  }
+});
+
+// ==========================================
+// 1. ECU 노드 목록 전체 조회 API
+// ==========================================
+app.get("/api/ecu-nodes", async (req, res) => {
+  try {
+    const rows = await db("SELECT * FROM ecu_nodes ORDER BY node_id ASC");
+    res.json(rows);
+  } catch (error) {
+    console.error("ECU Nodes Fetch Error:", error.message);
+    res.status(500).json({ error: "ECU 노드 정보를 가져오는 데 실패했습니다." });
+  }
+});
+
+// ==========================================
+// 2. BMS 셀 로그 전체 조회 API (SQLite 테이블 조회)
+// ==========================================
+app.get("/api/bms-logs", async (req, res) => {
+  try {
+    const rows = await db("SELECT * FROM bms_cell_logs ORDER BY timestamp DESC LIMIT 50");
+    res.json(rows);
+  } catch (error) {
+    console.error("BMS Logs Fetch Error:", error.message);
+    res.status(500).json({ error: "BMS 셀 로그 정보를 가져오는 데 실패했습니다." });
   }
 });
 
