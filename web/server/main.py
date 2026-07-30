@@ -1,20 +1,18 @@
 import os
-import sqlite3
-import json
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
-from openai import OpenAI
-from dotenv import load_dotenv
 
-from tools.db_tools import ALL_TOOLS, execute_tool, get_db_connection
+from tools import get_db_connection
+from tools.langchain_tools import AGENT_TOOLS
 
-# .env 로드
 load_dotenv(dotenv_path=".env")
 
 app = FastAPI(title="Jaryong Mobility Backend")
-
-# CORS 설정 (Vue 5173 허용)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,102 +21,70 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 8080번 Qwen AI 서버 클라이언트
-AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://localhost:8080/v1")
-openai_client = OpenAI(
-    base_url=AI_SERVER_URL,
-    api_key="no-need"
-)
-
-# Request Body 스키마
-class ChatRequest(BaseModel):
-    message: str
-
-
 SYSTEM_PROMPT = """너는 자룡모빌리티의 차량 전장 및 AI 비서다.
-사원/ECU DB 질의와 변경은 반드시 제공된 도구를 사용하고, 조회 결과의 ID를 함께 안내한다.
-채용공고 PDF는 search_job_posting, BMS CSV의 의미 기반 질문은 search_bms_log_documents를 사용한다.
-BMS CSV는 전용 도구로만 CRUD하고, PDF는 어떤 경우에도 읽기/검색만 한다.
-등록·수정·삭제는 사용자의 요청이 명확할 때만 수행한다. 도구 결과에 없는 사실을 만들지 말고 한국어로 간결하게 답한다."""
+사원과 ECU의 조회·등록·수정·삭제는 반드시 해당 도구를 사용하고, 수정/삭제 전에는 ID를 확인한다.
+BMS CSV는 전용 도구로만 CRUD한다. 의미 기반 BMS 질문은 search_bms_log_documents를 사용한다.
+채용공고 PDF는 search_job_posting으로 읽기/검색만 하며 절대 수정·삭제하지 않는다.
+등록·수정·삭제는 사용자의 요청이 명확할 때만 수행하고, 도구 결과에 없는 사실은 만들지 않는다."""
+
+llm = ChatOpenAI(
+    model=os.getenv("AI_MODEL", "qwen3.5"),
+    api_key=os.getenv("AI_API_KEY", "no-need"),
+    base_url=os.getenv("AI_SERVER_URL", "http://localhost:8080/v1"),
+    temperature=0.3,
+    max_tokens=8192,
+)
+agent = create_agent(model=llm, system_prompt=SYSTEM_PROMPT, tools=AGENT_TOOLS)
 
 
-# ==========================================
-# 1. AI 챗봇 대화 API (/api/chat)
-# ==========================================
-@app.post("/api/chat")
-async def chat_endpoint(request: ChatRequest):
-    if not request.message.strip():
+class ChatRequest(BaseModel):
+    # prompt is the new API field; message keeps the existing Vue client compatible.
+    prompt: str | None = None
+    message: str | None = None
+
+
+def _answer(prompt: str) -> str:
+    if not prompt.strip():
         raise HTTPException(status_code=400, detail="메시지를 입력해주세요.")
-
     try:
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": request.message},
-        ]
-        # A model can ask for several tools at once, or use a second tool after
-        # seeing the first result.  Keep the complete tool-call conversation.
-        for _ in range(6):
-            response = openai_client.chat.completions.create(
-                model=os.getenv("AI_MODEL", "qwen3.5"), messages=messages, tools=ALL_TOOLS
-            )
-            ai_message = response.choices[0].message
-            if not ai_message.tool_calls:
-                return {"reply": ai_message.content or "응답을 생성하지 못했습니다."}
-
-            messages.append(ai_message)
-            for tool_call in ai_message.tool_calls:
-                function_name = tool_call.function.name
-                try:
-                    arguments = json.loads(tool_call.function.arguments or "{}")
-                except json.JSONDecodeError:
-                    result = {"status": "error", "message": "도구 인자 형식이 올바른 JSON이 아닙니다."}
-                else:
-                    result = execute_tool(function_name, arguments)
-                print(f"[Tool] {function_name}: {result}")
-                messages.append({
-                    "role": "tool", "tool_call_id": tool_call.id,
-                    "name": function_name,
-                    "content": json.dumps(result, ensure_ascii=False),
-                })
-        return {"reply": "도구 호출 횟수가 제한을 초과했습니다. 요청을 나누어 다시 시도해주세요."}
-
-    except Exception as e:
-        print(f"Chat API Error: {e}")
-        raise HTTPException(status_code=500, detail=f"AI 처리 중 오류가 발생했습니다: {str(e)}")
+        response = agent.invoke({"messages": [("user", prompt)]})
+        content = response["messages"][-1].content
+        return content if isinstance(content, str) else str(content)
+    except Exception as exc:
+        print(f"Chat API Error: {exc}")
+        raise HTTPException(status_code=500, detail=f"AI 처리 중 오류가 발생했습니다: {exc}") from exc
 
 
-# ==========================================
-# 2. ECU 노드 목록 전체 조회 API (/api/ecu-nodes)
-# ==========================================
+@app.post("/api/v1/chat")
+def chat_v1_endpoint(request: ChatRequest):
+    """LangChain-agent chat endpoint using the `prompt` request field."""
+    return {"answer": _answer(request.prompt or request.message or "")}
+
+
+@app.post("/api/chat")
+def chat_endpoint(request: ChatRequest):
+    """Backward-compatible endpoint used by the existing Vue client."""
+    return {"reply": _answer(request.message or request.prompt or "")}
+
+
 @app.get("/api/ecu-nodes")
-async def get_ecu_nodes():
+def get_ecu_nodes():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM ecu_nodes ORDER BY rowid ASC")
-        rows = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return rows
-    except Exception as e:
-        print(f"ECU Nodes Fetch Error: {e}")
-        raise HTTPException(status_code=500, detail="ECU 노드 정보를 가져오는 데 실패했습니다.")
+        with get_db_connection() as conn:
+            rows = conn.execute("SELECT * FROM ecu_nodes ORDER BY node_id ASC").fetchall()
+        return [dict(row) for row in rows]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="ECU 노드 정보를 가져오는 데 실패했습니다.") from exc
 
 
-# ==========================================
-# 3. BMS 셀 로그 전체 조회 API (/api/bms-logs)
-# ==========================================
 @app.get("/api/bms-logs")
-async def get_bms_logs():
+def get_bms_logs_endpoint():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM bms_cell_logs ORDER BY timestamp DESC LIMIT 50")
-        rows = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return rows
-    except Exception as e:
-        print(f"BMS Logs Fetch Error: {e}")
-        raise HTTPException(status_code=500, detail="BMS 셀 로그 정보를 가져오는 데 실패했습니다.")
+        with get_db_connection() as conn:
+            rows = conn.execute("SELECT * FROM bms_cell_logs ORDER BY timestamp DESC LIMIT 50").fetchall()
+        return [dict(row) for row in rows]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="BMS 셀 로그 정보를 가져오는 데 실패했습니다.") from exc
 
 
 if __name__ == "__main__":

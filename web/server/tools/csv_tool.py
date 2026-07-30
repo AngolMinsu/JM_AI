@@ -53,8 +53,7 @@ def _write_rows(rows: list[dict[str, Any]]) -> None:
 
 def _sync_to_database(rows: list[dict[str, Any]]) -> None:
     """Keep the existing /api/bms-logs endpoint aligned with the CSV file."""
-    # Local import avoids a module-import cycle: db_tools registers this tool.
-    from tools.db_tools import get_db_connection
+    from tools.db.connection import get_db_connection
     conn = get_db_connection()
     try:
         conn.execute("DELETE FROM bms_cell_logs")
@@ -91,7 +90,7 @@ def execute_csv_tool(function_name: str, arguments: Dict[str, Any]) -> Dict[str,
             rows.append(row)
             _write_rows(rows)
             _sync_to_database(rows)
-            return {"status": "success", "message": "BMS CSV 로그를 추가했습니다.", "log": row}
+            return {"status": "success", "message": "BMS CSV 로그를 추가했습니다. RAG 검색 반영을 위해 색인을 다시 생성하세요.", "log": row, "rag_index_stale": True}
 
         matches = [index for index, row in enumerate(rows) if (row["timestamp"], row["pack_id"]) == key]
         if not matches:
@@ -104,12 +103,12 @@ def execute_csv_tool(function_name: str, arguments: Dict[str, Any]) -> Dict[str,
                 rows[matches[0]][field] = str(arguments[field]).strip()
             _write_rows(rows)
             _sync_to_database(rows)
-            return {"status": "success", "message": "BMS CSV 로그를 수정했습니다.", "log": rows[matches[0]]}
+            return {"status": "success", "message": "BMS CSV 로그를 수정했습니다. RAG 검색 반영을 위해 색인을 다시 생성하세요.", "log": rows[matches[0]], "rag_index_stale": True}
         if function_name == "delete_bms_log":
             removed = rows.pop(matches[0])
             _write_rows(rows)
             _sync_to_database(rows)
-            return {"status": "success", "message": "BMS CSV 로그를 삭제했습니다.", "log": removed}
+            return {"status": "success", "message": "BMS CSV 로그를 삭제했습니다. RAG 검색 반영을 위해 색인을 다시 생성하세요.", "log": removed, "rag_index_stale": True}
         return {"status": "error", "message": f"알 수 없는 CSV 도구: {function_name}"}
     except (OSError, ValueError, KeyError) as exc:
         return {"status": "error", "message": f"BMS CSV 처리 오류: {exc}"}

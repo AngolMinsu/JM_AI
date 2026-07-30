@@ -803,3 +803,18 @@ nohup: ignoring input
 176.07.401.542 I slot print_timing: id  3 | task 25984 |       total time =    8207.58 ms /   941 tokens
 176.07.401.586 I slot print_timing: id  3 | task 25984 |    graphs reused =      25893
 176.07.402.058 I slot      release: id  3 | task 25984 | stop processing: n_tokens = 3308, truncated = 0
+183.43.253.698 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 0.993 (> 0.100 thold), f_keep = 0.674
+183.43.255.049 I slot launch_slot_: id  3 | task 26488 | processing task, is_child = 0
+183.45.775.626 I slot print_timing: id  3 | task 26488 | prompt eval time =     819.77 ms /  1387 tokens (    0.59 ms per token,  1691.93 tokens per second)
+183.45.775.633 I slot print_timing: id  3 | task 26488 |        eval time =    1700.70 ms /   108 tokens (   15.75 ms per token,    63.50 tokens per second)
+183.45.775.634 I slot print_timing: id  3 | task 26488 |       total time =    2520.47 ms /  1495 tokens
+183.45.775.634 I slot print_timing: id  3 | task 26488 |    graphs reused =      25998
+183.45.776.075 I slot      release: id  3 | task 26488 | stop processing: n_tokens = 2352, truncated = 0
+183.46.226.233 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 0.977 (> 0.100 thold), f_keep = 1.000
+183.46.226.739 I slot launch_slot_: id  3 | task 26600 | processing task, is_child = 0
+183.49.390.808 I slot print_timing: id  3 | task 26600 | n_decoded =    190, tg =  63.21 t/s, tg_3s =  63.21 t/s
+183.50.157.739 I slot print_timing: id  3 | task 26600 | prompt eval time =     158.28 ms /    55 tokens (    2.88 ms per token,   347.49 tokens per second)
+183.50.157.748 I slot print_timing: id  3 | task 26600 |        eval time =    3772.68 ms /   239 tokens (   15.79 ms per token,    63.35 tokens per second)
+183.50.157.749 I slot print_timing: id  3 | task 26600 |       total time =    3930.96 ms /   294 tokens
+183.50.157.777 I slot print_timing: id  3 | task 26600 |    graphs reused =      26234
+183.50.158.040 I slot      release: id  3 | task 26600 | stop processing: n_tokens = 2645, truncated = 0

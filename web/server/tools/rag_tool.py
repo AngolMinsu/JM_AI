@@ -1,4 +1,4 @@
-"""Chroma-based RAG search over documents ingested by ingest_documents.py."""
+"""Shared Chroma retrieval used by source-specific CSV/PDF tools."""
 import os
 from pathlib import Path
 from typing import Any, Dict, List
@@ -27,8 +27,6 @@ class QwenLocalEmbeddings(Embeddings):
 
     def embed_query(self, text: str) -> List[float]:
         return self._embed([text])[0]
-
-RAG_TOOL_SPEC: Dict[str, Any] = {"type": "function", "function": {"name": "search_company_documents", "description": "사내 채용공고와 BMS 셀 로그 문서를 검색합니다. 문서에 근거해야 하는 질문에 사용합니다.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "사용자 질문을 그대로 담은 검색어"}}, "required": ["query"], "additionalProperties": False}}}
 
 def execute_rag_search(query: str, k: int = 4, source: str | None = None) -> Dict[str, Any]:
     if not query.strip():
