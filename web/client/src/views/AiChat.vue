@@ -41,12 +41,13 @@ const sendMessage = async () => {
   await scrollToBottom();
 
   try {
-    // Node.js 서버로 통신
-    const res = await axios.post('http://localhost:3000/api/chat', { 
+    // 8000번 Node.js 백엔드로 POST 요청
+    const res = await axios.post('http://localhost:8000/api/chat', { 
       message: text 
     });
     
-    messages.value.push({ role: 'ai', text: res.data.answer });
+    // 백엔드의 { reply: "..." } 응답 수신
+    messages.value.push({ role: 'ai', text: res.data.reply });
   } catch (error) {
     messages.value.push({ role: 'ai', text: '응답을 받아오지 못했습니다.' });
   }

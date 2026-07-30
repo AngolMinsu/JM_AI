@@ -14,3 +14,10 @@ nohup: ignoring input
 0.25.825.524 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
 0.25.844.491 I srv  llama_server: model loaded
 0.25.844.528 I srv  llama_server: listening on http://0.0.0.0:8080
+42.58.633.777 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1
+42.58.638.057 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0
+42.59.982.255 I slot print_timing: id  3 | task 0 | prompt eval time =     302.43 ms /   340 tokens (    0.89 ms per token,  1124.23 tokens per second)
+42.59.982.267 I slot print_timing: id  3 | task 0 |        eval time =    2418.02 ms /   157 tokens (   15.40 ms per token,    64.93 tokens per second)
+42.59.982.267 I slot print_timing: id  3 | task 0 |       total time =    2720.45 ms /   497 tokens
+42.59.982.274 I slot print_timing: id  3 | task 0 |    graphs reused =        156
+42.59.982.372 I slot      release: id  3 | task 0 | stop processing: n_tokens = 496, truncated = 0
