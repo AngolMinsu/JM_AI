@@ -6,10 +6,13 @@ from pathlib import Path
 from typing import Any, Dict, Iterable
 
 try:
-    from tools.rag_tool import RAG_TOOL_SPEC, execute_rag_search
+    from tools.csv_tool import CSV_TOOL_SPECS, execute_csv_tool
+    from tools.pdf_tool import PDF_TOOL_SPEC, execute_pdf_tool
 except ImportError:  # Allows DB-only startup when optional RAG packages are absent.
-    RAG_TOOL_SPEC = None
-    execute_rag_search = None
+    CSV_TOOL_SPECS = []
+    PDF_TOOL_SPEC = None
+    execute_csv_tool = None
+    execute_pdf_tool = None
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DB_PATH = SERVER_DIR / "db" / "database.sqlite"
@@ -52,8 +55,9 @@ ALL_TOOLS = [
     {"type": "function", "function": {"name": "update_ecu", "description": "node_id로 ECU 정보를 수정합니다. 변경할 필드만 보냅니다.", "parameters": _schema({"node_id": {"type": "integer"}, **ECU_FIELDS}, ("node_id",))}},
     {"type": "function", "function": {"name": "delete_ecu", "description": "node_id로 ECU 노드를 삭제합니다.", "parameters": _schema({"node_id": {"type": "integer"}}, ("node_id",))}},
 ]
-if RAG_TOOL_SPEC:
-    ALL_TOOLS.append(RAG_TOOL_SPEC)
+ALL_TOOLS.extend(CSV_TOOL_SPECS)
+if PDF_TOOL_SPEC:
+    ALL_TOOLS.append(PDF_TOOL_SPEC)
 
 
 def _select_one(cursor: sqlite3.Cursor, table: str, id_column: str, args: Dict[str, Any], name_column: str):
@@ -80,8 +84,10 @@ def _changed_fields(arguments: Dict[str, Any], allowed: Dict[str, Any]) -> tuple
 
 def execute_tool(function_name: str, arguments: Dict[str, Any] | None = None) -> Any:
     arguments = arguments or {}
-    if function_name == "search_company_documents":
-        return execute_rag_search(str(arguments.get("query", ""))) if execute_rag_search else {"status": "error", "message": "RAG 모듈을 불러올 수 없습니다."}
+    if function_name in {spec["function"]["name"] for spec in CSV_TOOL_SPECS}:
+        return execute_csv_tool(function_name, arguments) if execute_csv_tool else {"status": "error", "message": "CSV 도구를 불러올 수 없습니다."}
+    if function_name == "search_job_posting":
+        return execute_pdf_tool(arguments) if execute_pdf_tool else {"status": "error", "message": "PDF 도구를 불러올 수 없습니다."}
 
     conn = get_db_connection()
     cursor = conn.cursor()

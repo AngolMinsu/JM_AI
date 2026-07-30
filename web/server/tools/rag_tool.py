@@ -30,14 +30,15 @@ class QwenLocalEmbeddings(Embeddings):
 
 RAG_TOOL_SPEC: Dict[str, Any] = {"type": "function", "function": {"name": "search_company_documents", "description": "사내 채용공고와 BMS 셀 로그 문서를 검색합니다. 문서에 근거해야 하는 질문에 사용합니다.", "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "사용자 질문을 그대로 담은 검색어"}}, "required": ["query"], "additionalProperties": False}}}
 
-def execute_rag_search(query: str, k: int = 4) -> Dict[str, Any]:
+def execute_rag_search(query: str, k: int = 4, source: str | None = None) -> Dict[str, Any]:
     if not query.strip():
         return {"status": "error", "message": "검색어가 비어 있습니다."}
     if not VECTOR_DB_PATH.exists():
         return {"status": "not_ready", "message": f"RAG 인덱스가 없습니다. web/server에서 'python -m tools.ingest_documents'를 실행하세요."}
     try:
         store = Chroma(collection_name=COLLECTION_NAME, persist_directory=str(VECTOR_DB_PATH), embedding_function=QwenLocalEmbeddings())
-        docs_and_scores = store.similarity_search_with_relevance_scores(query, k=k)
+        filter_metadata = {"source": source} if source else None
+        docs_and_scores = store.similarity_search_with_relevance_scores(query, k=k, filter=filter_metadata)
         results = [{"content": doc.page_content, "source": doc.metadata.get("source", "unknown"), "chunk": doc.metadata.get("chunk", 0), "score": round(float(score), 4)} for doc, score in docs_and_scores]
         return {"status": "success", "query": query, "results": results} if results else {"status": "not_found", "message": "관련 문서를 찾지 못했습니다."}
     except Exception as exc:
