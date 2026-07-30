@@ -1,0 +1,15 @@
+nohup: ignoring input
+0.00.057.700 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.147.227 W srv  llama_server: embeddings enabled with n_batch (2048) > n_ubatch (512)
+0.00.147.231 W srv  llama_server: setting n_batch = n_ubatch = 512 to avoid assertion failure
+0.00.147.575 W srv  llama_server: -----------------
+0.00.147.577 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.147.577 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.147.577 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.147.577 W srv  llama_server: -----------------
+0.00.148.935 I srv    load_model: loading model '/home/ssafy/work/models/Qwen3-Embedding-8B/Qwen3-Embedding-8B.Q5_K_M.gguf'
+0.00.684.775 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.17.815.625 W llama_init_from_model: model default pooling_type is [3], but [1] was specified
+0.16.598.340 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.16.601.234 I srv  llama_server: model loaded
+0.16.601.244 I srv  llama_server: listening on http://0.0.0.0:8081

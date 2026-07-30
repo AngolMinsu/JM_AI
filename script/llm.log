@@ -1,0 +1,16 @@
+nohup: ignoring input
+0.00.073.640 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.197.237 W srv  llama_server: -----------------
+0.00.197.241 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.197.241 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.197.241 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.197.241 W srv  llama_server: -----------------
+0.00.198.634 I srv    load_model: loading model '/home/ssafy/work/models/Qwen3.5-9B/Qwen3.5-9B-Q4_K_M.gguf'
+0.17.306.325 W load_hparams: Qwen-VL models require at minimum 1024 image tokens to function correctly on grounding tasks
+0.17.306.332 W load_hparams: if you encounter problems with accuracy, try adding --image-min-tokens 1024
+0.17.306.332 W load_hparams: more info: https://github.com/ggml-org/llama.cpp/issues/16842
+
+0.25.794.130 I srv    load_model: loaded multimodal model, '/home/ssafy/work/models/Qwen3.5-9B/mmproj-BF16.gguf'
+0.25.825.524 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 8192, kv_unified = 'true'
+0.25.844.491 I srv  llama_server: model loaded
+0.25.844.528 I srv  llama_server: listening on http://0.0.0.0:8080

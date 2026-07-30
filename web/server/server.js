@@ -19,7 +19,8 @@ const db = promisify(foundDB.all.bind(foundDB));
 const app = express();
 const PORT = 8000;
 
-const AI_SERVER_URL = process.env.AI_SERVER_URL;
+// AI 서버 URL 설정 (.env에 AI_SERVER_URL=http://localhost:8080/v1/chat/completions 등록 추천)
+const AI_SERVER_URL = process.env.AI_SERVER_URL || "http://localhost:8080/v1/chat/completions";
 
 app.use(morgan("dev"));
 app.use(express.json());
